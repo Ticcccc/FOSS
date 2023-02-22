@@ -1,4 +1,5 @@
-﻿1) Liệt kê danh sách các hóa đơn (SalesOrderID) lặp trong tháng 6 năm 2008 có
+﻿--I) Câu lệnh SELECT sử dụng các hàm thống kê với các mệnh đề Group by và Having
+1) Liệt kê danh sách các hóa đơn (SalesOrderID) lặp trong tháng 6 năm 2008 có
 tổng tiền >70000, thông tin gồm SalesOrderID, Orderdate, SubTotal, trong đó
 SubTotal =sum(OrderQty*UnitPrice).
 	select d.SalesOrderID, OrderDate, SubTotal=sum(OrderQty * UnitPrice)
@@ -94,3 +95,130 @@ from [HumanResources].[Department] d join [HumanResources].[EmployeeDepartmentHi
 									 join [HumanResources].[EmployeePayHistory] e on h.BusinessEntityID=e.BusinessEntityID
 group by d.DepartmentID, d.name
 having avg([Rate])>30
+
+--II) Subquery
+1) Liệt kê các sản phẩm gồm các thông tin product names và product ID có trên
+100 đơn đặt hàng trong tháng 7 năm 2008
+select ProductID, Name
+from Production.Product
+where ProductID in (select ProductID
+					from  Sales.SalesOrderDetail d join Sales.SalesOrderHeader h on d.SalesOrderID=h.SalesOrderID
+					where MONTH(OrderDate)=7 and YEAR(OrderDate)=2008
+					group by  ProductID
+					having COUNT(*)>100)
+---
+select ProductID, Name
+from Production.Product p 
+where  exists (select ProductID
+					from  Sales.SalesOrderDetail d join Sales.SalesOrderHeader h on d.SalesOrderID=h.SalesOrderID
+					where MONTH(OrderDate)=7 and YEAR(OrderDate)=2008 and ProductID=p.ProductID
+					group by  ProductID
+					having COUNT(*)>100)
+
+2) Liệt kê các sản phẩm (ProductID, name) có số hóa đơn đặt hàng nhiều nhất trong
+tháng 7/2008
+select p.ProductID, Name
+from Production.Product p join Sales.SalesOrderDetail d on p.ProductID=d.ProductID
+	                      join Sales.SalesOrderHeader h on d.SalesOrderID=h.SalesOrderID
+where  MONTH(OrderDate)=7 and YEAR(OrderDate)=2008
+group by p.ProductID, Name
+having COUNT(*)>=all( select COUNT(*)
+					  from Sales.SalesOrderDetail d join Sales.SalesOrderHeader h on d.SalesOrderID=h.SalesOrderID
+	                  where MONTH(OrderDate)=7 and YEAR(OrderDate)=2008
+					  group by ProductID
+					  )
+
+3) Hiển thị thông tin của khách hàng có số đơn đặt hàng nhiều nhất, thông tin gồm:
+CustomerID, Name, CountofOrder
+select 	c.CustomerID, CountofOrder=COUNT(*)
+from Sales.Customer c join Sales.SalesOrderHeader h on c.CustomerID=h.CustomerID
+group by c.CustomerID
+having COUNT(*)>=all(select COUNT(*)
+					 from Sales.Customer c join Sales.SalesOrderHeader h on c.CustomerID=h.CustomerID
+					 group by c.CustomerID)	
+
+4) Liệt kê các sản phẩm (ProductID, Name) thuộc mô hình sản phẩm áo dài tay với
+tên bắt đầu với “Long-Sleeve Logo Jersey”, dùng phép IN và EXISTS, (sử dụng
+bảng Production.Product và Production.ProductModel
+select ProductID, Name
+from Production.Product 
+where ProductModelID in (select ProductModelID 
+						 from Production.ProductModel
+						 where Name like 'Long-Sleeve Logo Jersey%')
+--
+select ProductID, Name
+from Production.Product p
+where exists (select ProductModelID 
+						 from Production.ProductModel
+						 where Name like 'Long-Sleeve Logo Jersey%' and ProductModelID=p.ProductModelID)
+
+5) Tìm các mô hình sản phẩm (ProductModelID) mà giá niêm yết (list price) tối đa
+cao hơn giá trung bình của tất cả các mô hình.
+select p.ProductModelID, m.Name, max(ListPrice)
+from Production.ProductModel m join Production.Product p on m.ProductModelID=p.ProductModelID
+group by p.ProductModelID, m.Name
+having max(ListPrice)>=all(select AVG(ListPrice)
+							from Production.ProductModel m join Production.Product p on m.ProductModelID=p.ProductModelID
+							)
+
+6) Liệt kê các sản phẩm gồm các thông tin ProductID, Name, có tổng số lượng đặt
+hàng >5000 (dùng In, exists)
+select ProductID, Name
+from Production.Product 
+where ProductID in (select ProductID 
+					from Sales.SalesOrderDetail
+					group by ProductID
+					having SUM(OrderQty)>5000)
+--
+select ProductID, Name
+from Production.Product p
+where exists (select ProductID 
+					from Sales.SalesOrderDetail
+					where ProductID=p.ProductID
+					group by ProductID
+					having SUM(OrderQty)>5000)
+
+7) Liệt kê những sản phẩm (ProductID, UnitPrice) có đơn giá (UnitPrice) cao nhất
+trong bảng Sales.SalesOrderDetail
+select distinct ProductID, UnitPrice
+from Sales.SalesOrderDetail
+where UnitPrice>=all (select distinct UnitPrice
+					 from Sales.SalesOrderDetail)
+
+8) Liệt kê các sản phầm không có đơn đặt hàng nào thông tin gồm ProductID,
+Name, dùng 3 cách Not in, not exists và left join.
+select P.productID, Name
+from Production.Product p left join Sales.SalesOrderDetail d on p.ProductID=d.ProductID
+where d.ProductID is null
+--
+select productID, Name
+from Production.Product
+where productID not in (select productID 
+						from Sales.SalesOrderDetail)
+--
+select productID, Name
+from Production.Product p
+where not exists (select productID 
+				  from Sales.SalesOrderDetail
+				  where p.ProductID=ProductID)
+
+9) Liệt kê các nhân viên không lập hóa đơn từ sau ngày 1/5/2008, thông tin gồm
+EmployeeID, FirstName, LastName (dữ liệu từ 2 bảng HR.Employees và
+Sales.Orders)
+select [BusinessEntityID] as EmployeeID, FirstName, LastName
+from [Person].[Person]
+where [BusinessEntityID]  in (select [SalesPersonID]
+								 from [Sales].[SalesOrderHeader]
+								 where [OrderDate]>'2008-5-1'
+								 )
+
+10)Liệt kê danh sách các khách hàng (customerID, name) có hóa đơn dặt hàng trong
+năm 2007 nhưng có hóa đơn đặt hàng trong năm 2008.
+select [CustomerID]
+from [Sales].[SalesOrderHeader]
+where [CustomerID] in (select [CustomerID]
+					   from [Sales].[SalesOrderHeader]
+					   where year([OrderDate])=2007 )  
+	and [CustomerID] not in (select [CustomerID]
+					   from [Sales].[SalesOrderHeader]
+					   where year([OrderDate])=2008)
